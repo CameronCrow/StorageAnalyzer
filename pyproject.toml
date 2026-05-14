@@ -22,6 +22,11 @@ classifiers = [
 # and the optional C++ extension is the only thing that needs a toolchain.
 dependencies = []
 
+[project.optional-dependencies]
+# Tooling for building the standalone .exe (see build-exe.ps1). pybind11 is
+# listed here too so `pip install -e . --no-build-isolation` can find it.
+build = ["pyinstaller>=6.0", "pybind11>=2.10"]
+
 [project.scripts]
 storageanalyzer = "storageanalyzer.cli:main"
 

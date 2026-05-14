@@ -47,6 +47,28 @@ environment's `pybind11`):
 pip install -e . --no-build-isolation
 ```
 
+## Build a standalone .exe
+
+To ship the tool as a single self-contained `storageanalyzer.exe` (no Python
+install required on the target machine):
+
+```powershell
+# one-time: install the build tooling (PyInstaller + pybind11)
+pip install -e ".[build]"
+
+# build -- produces dist\storageanalyzer.exe
+.\build-exe.ps1
+```
+
+`build-exe.ps1` compiles the native C++ walker, then runs PyInstaller against
+`storageanalyzer.spec` to produce a one-file exe (~8.5 MB) with the native
+walker and the HTML template bundled in. PyInstaller caches its analysis in
+`build\`, so re-runs are quick — pure-Python source edits need no recompile,
+only `walker.cpp` changes do. Pass `-Clean` to force a full rebuild.
+
+The exe is fully portable: copy `dist\storageanalyzer.exe` anywhere and run it.
+It takes the same arguments as the `storageanalyzer` command below.
+
 ## Usage
 
 ```powershell
