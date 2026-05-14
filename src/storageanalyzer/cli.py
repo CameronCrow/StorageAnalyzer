@@ -84,7 +84,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _print_summary(report_data: dict, out_path: Path) -> None:
+def _print_summary(
+    report_data: dict, out_path: Path, include_hidden: bool
+) -> None:
     stats = report_data["stats"]
     dirs = report_data["largest_dirs"][:10]
     files = report_data["largest_files"][:10]
@@ -100,6 +102,11 @@ def _print_summary(report_data: dict, out_path: Path) -> None:
     print(f"  Access denied     : {stats.get('denied_count', 0):,}")
     if stats.get("elapsed_seconds") is not None:
         print(f"  Elapsed           : {stats['elapsed_seconds']:.2f} s")
+    if not include_hidden:
+        print(
+            "  Note: hidden/system items were skipped "
+            "-- re-run with --include-hidden to count them"
+        )
 
     if dirs:
         print()
@@ -111,6 +118,16 @@ def _print_summary(report_data: dict, out_path: Path) -> None:
         print("  Top files by size")
         for f in files:
             print(f"    {_fmt_size(f['size']):>11}  {f['path']}")
+
+    denied = report_data.get("denied_dirs", [])
+    if denied:
+        shown = denied[:15]
+        print()
+        print(f"  Access-denied directories ({len(denied):,} not scanned)")
+        for path in shown:
+            print(f"    {path}")
+        if len(denied) > len(shown):
+            print(f"    ... and {len(denied) - len(shown):,} more (see HTML report)")
 
     print()
     print(f"  HTML report written to: {out_path}")
@@ -160,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     write_report(report_data, out_path)
-    _print_summary(report_data, out_path)
+    _print_summary(report_data, out_path, args.include_hidden)
 
     if not args.no_open:
         try:
