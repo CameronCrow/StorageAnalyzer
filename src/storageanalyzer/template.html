@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StorageAnalyzer Report</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #1a1f2e;
+    --border: #2b3245;
+    --text: #e6e9f0;
+    --muted: #8b93a7;
+    --accent: #4ea1d3;
+    --accent-2: #d4af37;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { margin: 0 0 4px; font-size: 18px; }
+  header .root { color: var(--accent); font-family: Consolas, monospace; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .meta b { color: var(--text); font-weight: 600; }
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  section { margin-bottom: 32px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent-2); }
+  #breadcrumb {
+    margin-bottom: 8px;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+  }
+  #breadcrumb span {
+    color: var(--accent);
+    cursor: pointer;
+  }
+  #breadcrumb span:hover { text-decoration: underline; }
+  #breadcrumb .sep { color: var(--muted); cursor: default; }
+  #breadcrumb .current { color: var(--text); cursor: default; }
+  canvas {
+    width: 100%;
+    height: 460px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    cursor: pointer;
+    display: block;
+  }
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 9px;
+    font-size: 12px;
+    font-family: Consolas, monospace;
+    display: none;
+    z-index: 10;
+    max-width: 480px;
+    word-break: break-all;
+  }
+  .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .tables { grid-template-columns: 1fr; } }
+  .filter {
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font: inherit;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    cursor: pointer;
+    user-select: none;
+    color: var(--muted);
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+  }
+  th:hover { color: var(--text); }
+  th .arrow { color: var(--accent); }
+  td.size { text-align: right; font-family: Consolas, monospace; white-space: nowrap; }
+  td.path { font-family: Consolas, monospace; word-break: break-all; }
+  tbody tr:hover { background: #232a3d; }
+  tbody tr.clickable { cursor: pointer; }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+  footer {
+    padding: 16px 24px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>StorageAnalyzer &mdash; <span class="root" id="h-root"></span></h1>
+  <div class="meta">
+    <span>Total: <b id="h-total"></b></span>
+    <span>Files: <b id="h-files"></b></span>
+    <span>Directories: <b id="h-dirs"></b></span>
+    <span>Access denied: <b id="h-denied"></b></span>
+    <span>Elapsed: <b id="h-elapsed"></b></span>
+    <span>Threads: <b id="h-threads"></b></span>
+    <span>Engine: <b id="h-engine"></b></span>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>Treemap &mdash; click a folder to drill in</h2>
+    <div id="breadcrumb"></div>
+    <canvas id="treemap"></canvas>
+  </section>
+  <section class="tables">
+    <div>
+      <h2>Largest directories</h2>
+      <input class="filter" id="filter-dirs" placeholder="Filter by path&hellip;">
+      <div class="scroll">
+        <table id="table-dirs">
+          <thead><tr>
+            <th data-key="path">Path</th>
+            <th data-key="size">Recursive size</th>
+            <th data-key="own">Own size</th>
+            <th data-key="files">Files</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2>Largest files</h2>
+      <input class="filter" id="filter-files" placeholder="Filter by path&hellip;">
+      <div class="scroll">
+        <table id="table-files">
+          <thead><tr>
+            <th data-key="path">Path</th>
+            <th data-key="size">Size</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  <section id="denied-section" style="display:none">
+    <h2>Access-denied directories &mdash; <span id="denied-list-count"></span> not scanned</h2>
+    <p style="color:var(--muted);margin:0 0 8px">
+      These folders could not be enumerated, so their contents are excluded from
+      the totals above. Re-run from an elevated prompt to include them.
+    </p>
+    <input class="filter" id="filter-denied" placeholder="Filter by path&hellip;">
+    <div class="scroll">
+      <table id="table-denied">
+        <thead><tr><th data-key="path">Path</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<footer>Generated by StorageAnalyzer. Self-contained &mdash; no network access required.</footer>
+<div id="tooltip"></div>
+<script>
+const DATA = /*DATA*/;
+
+function fmtSize(b) {
+  const u = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let v = b, i = 0;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v : v.toFixed(2)) + " " + u[i];
+}
+
+// ---- header ----
+DATA.stats = DATA.stats || {};
+document.getElementById("h-root").textContent = DATA.root || "";
+document.getElementById("h-total").textContent = fmtSize(DATA.stats.total_bytes || 0);
+document.getElementById("h-files").textContent = (DATA.stats.files_scanned || 0).toLocaleString();
+document.getElementById("h-dirs").textContent = (DATA.stats.dirs_scanned || 0).toLocaleString();
+document.getElementById("h-denied").textContent = (DATA.stats.denied_count || 0).toLocaleString();
+document.getElementById("h-elapsed").textContent = (DATA.stats.elapsed_seconds != null)
+  ? DATA.stats.elapsed_seconds.toFixed(2) + " s" : "n/a";
+document.getElementById("h-threads").textContent = DATA.stats.threads || "n/a";
+document.getElementById("h-engine").textContent = DATA.stats.engine || "n/a";
+
+// ---- squarified treemap ----
+const canvas = document.getElementById("treemap");
+const ctx = canvas.getContext("2d");
+const tooltip = document.getElementById("tooltip");
+let stack = [DATA.tree];      // navigation stack; last entry is current root
+let rects = [];               // hit-test rects for the current render
+
+function squarify(children, x, y, w, h) {
+  // Classic squarified treemap. Returns [{node, x, y, w, h}, ...].
+  const out = [];
+  const items = children.filter(c => c.size > 0).slice();
+  if (!items.length) return out;
+  const total = items.reduce((s, c) => s + c.size, 0);
+  let scale = (w * h) / total;
+  let area = items.map(c => c.size * scale);
+
+  let i = 0;
+  while (i < items.length) {
+    let row = [i], rowArea = area[i], j = i + 1;
+    const vertical = w < h;
+    const side = vertical ? w : h;
+    function worst(rArea, rowLen) {
+      const len = rArea / side;
+      let mx = 0, mn = Infinity;
+      for (let k = 0; k < rowLen; k++) { mx = Math.max(mx, area[row[k]]); mn = Math.min(mn, area[row[k]]); }
+      return Math.max((side * side * mx) / (rArea * rArea), (rArea * rArea) / (side * side * mn));
+    }
+    while (j < items.length) {
+      const cur = worst(rowArea, row.length);
+      const next = worst(rowArea + area[j], row.length + 1);
+      if (next > cur) break;
+      row.push(j); rowArea += area[j]; j++;
+    }
+    const len = rowArea / side;
+    let off = 0;
+    for (const idx of row) {
+      const frac = area[idx] / rowArea;
+      if (vertical) {
+        out.push({ node: items[idx], x: x + off, y: y, w: side * frac, h: len });
+      } else {
+        out.push({ node: items[idx], x: x, y: y + off, w: len, h: side * frac });
+      }
+      off += (vertical ? side * frac : side * frac);
+    }
+    if (vertical) { y += len; h -= len; } else { x += len; w -= len; }
+    i = j;
+  }
+  return out;
+}
+
+function colorFor(idx) {
+  const hue = (idx * 47) % 360;
+  return `hsl(${hue}, 45%, 42%)`;
+}
+
+function render() {
+  const root = stack[stack.length - 1];
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  rects = [];
+  const children = root.children || [];
+  if (!children.length) {
+    ctx.fillStyle = "#8b93a7";
+    ctx.font = "13px Consolas, monospace";
+    ctx.fillText("(no sub-folders to display)", 16, 28);
+  } else {
+    const laid = squarify(children, 2, 2, cssW - 4, cssH - 4);
+    laid.forEach((r, i) => {
+      rects.push(r);
+      ctx.fillStyle = colorFor(i);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#0f1117";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      if (r.w > 56 && r.h > 22) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+        const label = baseName(r.node.name);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(r.x + 3, r.y + 3, r.w - 6, r.h - 6);
+        ctx.clip();
+        ctx.fillText(label, r.x + 5, r.y + 16);
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        ctx.fillText(fmtSize(r.node.size), r.x + 5, r.y + 31);
+        ctx.restore();
+      }
+    });
+  }
+  renderBreadcrumb();
+}
+
+function baseName(p) {
+  if (!p) return p;
+  const parts = p.replace(/[\\/]+$/, "").split(/[\\/]/);
+  return parts[parts.length - 1] || p;
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById("breadcrumb");
+  bc.innerHTML = "";
+  stack.forEach((node, i) => {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = " › ";
+      bc.appendChild(sep);
+    }
+    const el = document.createElement("span");
+    const isLast = i === stack.length - 1;
+    el.textContent = i === 0 ? (node.name || "root") : baseName(node.name);
+    if (isLast) {
+      el.className = "current";
+    } else {
+      el.onclick = () => { stack = stack.slice(0, i + 1); render(); };
+    }
+    bc.appendChild(el);
+  });
+}
+
+canvas.addEventListener("click", e => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  for (const rect of rects) {
+    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+      if (rect.node.children && rect.node.children.length && !rect.node.other) {
+        stack.push(rect.node);
+        render();
+      }
+      return;
+    }
+  }
+});
+
+canvas.addEventListener("mousemove", e => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  for (const rect of rects) {
+    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+      tooltip.style.display = "block";
+      tooltip.style.left = (e.clientX + 14) + "px";
+      tooltip.style.top = (e.clientY + 14) + "px";
+      tooltip.textContent = rect.node.name + "  —  " + fmtSize(rect.node.size);
+      return;
+    }
+  }
+  tooltip.style.display = "none";
+});
+canvas.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+window.addEventListener("resize", render);
+
+function focusPath(path) {
+  // Walk the tree from the root following name prefixes to focus a directory.
+  const chain = [DATA.tree];
+  let cur = DATA.tree;
+  while (cur && cur.name !== path) {
+    const next = (cur.children || []).find(
+      c => !c.other && (path === c.name || path.startsWith(c.name + "\\") || path.startsWith(c.name + "/"))
+    );
+    if (!next) break;
+    chain.push(next);
+    cur = next;
+  }
+  if (cur && cur.name === path && (cur.children || []).length) {
+    stack = chain;
+  } else if (chain.length > 1) {
+    stack = chain;
+  }
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ---- sortable / filterable tables ----
+function makeTable(tableId, filterId, rows, columns, onRowClick) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  const filterEl = document.getElementById(filterId);
+  let sortKey = "size", sortDir = -1;
+
+  function draw() {
+    const q = filterEl.value.trim().toLowerCase();
+    let view = rows;
+    if (q) view = rows.filter(r => String(r.path).toLowerCase().includes(q));
+    view = view.slice().sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      if (typeof av === "number") return (av - bv) * sortDir;
+      return String(av).localeCompare(String(bv)) * sortDir;
+    });
+    tbody.innerHTML = "";
+    for (const r of view) {
+      const tr = document.createElement("tr");
+      if (onRowClick) tr.className = "clickable";
+      for (const col of columns) {
+        const td = document.createElement("td");
+        if (col.type === "size") { td.className = "size"; td.textContent = fmtSize(r[col.key]); }
+        else if (col.type === "num") { td.className = "size"; td.textContent = (r[col.key] || 0).toLocaleString(); }
+        else { td.className = "path"; td.textContent = r[col.key]; }
+        tr.appendChild(td);
+      }
+      if (onRowClick) tr.onclick = () => onRowClick(r);
+      tbody.appendChild(tr);
+    }
+    document.querySelectorAll(`#${tableId} th`).forEach(th => {
+      const base = th.dataset.label || th.textContent.replace(/ [▲▼]$/, "");
+      th.dataset.label = base;
+      th.innerHTML = base + (th.dataset.key === sortKey
+        ? ` <span class="arrow">${sortDir < 0 ? "▼" : "▲"}</span>` : "");
+    });
+  }
+
+  document.querySelectorAll(`#${tableId} th`).forEach(th => {
+    th.onclick = () => {
+      const k = th.dataset.key;
+      if (k === sortKey) sortDir *= -1;
+      else { sortKey = k; sortDir = (k === "path") ? 1 : -1; }
+      draw();
+    };
+  });
+  filterEl.addEventListener("input", draw);
+  draw();
+}
+
+makeTable("table-dirs", "filter-dirs", DATA.largest_dirs || [],
+  [
+    { key: "path", type: "path" },
+    { key: "size", type: "size" },
+    { key: "own", type: "size" },
+    { key: "files", type: "num" },
+  ],
+  row => focusPath(row.path));
+
+makeTable("table-files", "filter-files", DATA.largest_files || [],
+  [
+    { key: "path", type: "path" },
+    { key: "size", type: "size" },
+  ],
+  null);
+
+// ---- access-denied directories ----
+const deniedDirs = DATA.denied_dirs || [];
+if (deniedDirs.length) {
+  document.getElementById("denied-section").style.display = "";
+  document.getElementById("denied-list-count").textContent =
+    deniedDirs.length.toLocaleString();
+  makeTable("table-denied", "filter-denied",
+    deniedDirs.map(p => ({ path: p })),
+    [{ key: "path", type: "path" }],
+    null);
+  const hd = document.getElementById("h-denied");
+  hd.style.cursor = "pointer";
+  hd.style.textDecoration = "underline";
+  hd.title = "Jump to the access-denied list";
+  hd.onclick = () => document.getElementById("denied-section")
+    .scrollIntoView({ behavior: "smooth" });
+}
+
+render();
+</script>
+</body>
+</html>

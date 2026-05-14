@@ -1,0 +1,23 @@
+# Python build / cache
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Compiled native extension (built locally by setup.py)
+*.pyd
+*.so
+*.obj
+*.lib
+*.exp
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated reports
+storageanalyzer-report-*.html
+reports/

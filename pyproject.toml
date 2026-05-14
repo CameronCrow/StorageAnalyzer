@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64", "pybind11>=2.10"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storageanalyzer"
+version = "1.0.0"
+description = "Fast parallel Windows storage analyzer with an interactive HTML report"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Cameron Crow" }]
+keywords = ["storage", "disk-usage", "treemap", "windows", "filesystem"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: System :: Filesystems",
+]
+# Zero runtime dependencies -- by design. The standard library is enough,
+# and the optional C++ extension is the only thing that needs a toolchain.
+dependencies = []
+
+[project.scripts]
+storageanalyzer = "storageanalyzer.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/CameronCrow/StorageAnalyzer"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+storageanalyzer = ["template.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
