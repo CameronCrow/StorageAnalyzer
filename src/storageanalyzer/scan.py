@@ -93,6 +93,7 @@ def scan(
         prune_threshold=prune_threshold,
     )
     report_data["stats"]["engine"] = engine_name
+    report_data["stats"]["include_hidden"] = include_hidden
     report_data["stats"].setdefault("threads", threads)
     # carry walker-reported timing/counters through if aggregate did not.
     for key in ("elapsed_seconds", "files_scanned"):

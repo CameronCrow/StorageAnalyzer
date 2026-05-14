@@ -37,6 +37,18 @@
     font-size: 13px;
   }
   .meta b { color: var(--text); font-weight: 600; }
+  #hidden-note {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent-2);
+    background: #221d10;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  #hidden-note code {
+    font-family: Consolas, monospace;
+    color: var(--accent-2);
+  }
   main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   section { margin-bottom: 32px; }
   h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent-2); }
@@ -128,6 +140,12 @@
     <span>Threads: <b id="h-threads"></b></span>
     <span>Engine: <b id="h-engine"></b></span>
   </div>
+  <div id="hidden-note" style="display:none">
+    Hidden and system items were skipped &mdash; re-run with
+    <code>--include-hidden</code> to count them. On a system drive this is
+    usually where &ldquo;missing&rdquo; space hides (page file, hibernation
+    file, shadow copies, recycle bin).
+  </div>
 </header>
 <main>
   <section>
@@ -203,6 +221,9 @@ document.getElementById("h-elapsed").textContent = (DATA.stats.elapsed_seconds !
   ? DATA.stats.elapsed_seconds.toFixed(2) + " s" : "n/a";
 document.getElementById("h-threads").textContent = DATA.stats.threads || "n/a";
 document.getElementById("h-engine").textContent = DATA.stats.engine || "n/a";
+if (!DATA.stats.include_hidden) {
+  document.getElementById("hidden-note").style.display = "";
+}
 
 // ---- squarified treemap ----
 const canvas = document.getElementById("treemap");
