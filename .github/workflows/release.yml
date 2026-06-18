@@ -1,0 +1,78 @@
+name: build & release
+
+# Builds the standalone exe (and the Inno Setup installer) on Windows. On a
+# version tag (v*) it publishes a GitHub Release with both attached, so cutting
+# a release is just:  git tag v1.0.1 && git push --tags
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling (PyInstaller + pybind11)
+        run: pip install -e ".[build]"
+
+      - name: Build native C++ extension in place
+        # Reuses the env's pybind11; compile failures degrade to the pure-Python
+        # walker (see setup.py), so this never blocks the build.
+        run: pip install -e . --no-build-isolation
+
+      - name: Build standalone exe
+        run: pyinstaller storageanalyzer.spec --noconfirm
+
+      - name: Smoke-test the exe
+        shell: pwsh
+        run: |
+          $exe = "dist\storageanalyzer.exe"
+          & $exe --version
+          $vi = (Get-Item $exe).VersionInfo
+          if ($vi.ProductName -ne "StorageAnalyzer") { throw "missing version resource" }
+          $t = Join-Path $env:RUNNER_TEMP "satest"
+          New-Item -ItemType Directory -Force -Path $t | Out-Null
+          Set-Content -Path (Join-Path $t "f.txt") -Value ("x" * 4096)
+          & $exe $t --no-open -o (Join-Path $env:RUNNER_TEMP "report.html")
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP "report.html"))) { throw "no report produced" }
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $version = (Select-String -Path src\storageanalyzer\__init__.py `
+            -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$version" installer\storageanalyzer.iss
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: storageanalyzer-windows
+          path: |
+            dist/storageanalyzer.exe
+            dist/StorageAnalyzer-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" `
+            dist\storageanalyzer.exe `
+            (Get-ChildItem dist\StorageAnalyzer-Setup-*.exe).FullName `
+            --title "StorageAnalyzer $env:GITHUB_REF_NAME" `
+            --generate-notes
