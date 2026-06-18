@@ -9,17 +9,9 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
+from ._format import format_size as _fmt_size
 from .report import write_report
 from .scan import scan
-
-
-def _fmt_size(num_bytes: float) -> str:
-    value = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if value < 1024 or unit == "TB":
-            return f"{value:.2f} {unit}" if unit != "B" else f"{int(value)} B"
-        value /= 1024
-    return f"{value:.2f} TB"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -80,6 +72,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not open the report in a browser when finished",
     )
+    p.add_argument(
+        "--gui",
+        action="store_true",
+        help="launch the native desktop GUI instead of running a CLI scan",
+    )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
@@ -136,6 +133,11 @@ def _print_summary(
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+
+    if args.gui:
+        from .gui import main as gui_main
+
+        return gui_main()
 
     root = Path(args.root)
     if not root.is_dir():
