@@ -62,12 +62,53 @@ pip install -e ".[build]"
 
 `build-exe.ps1` compiles the native C++ walker, then runs PyInstaller against
 `storageanalyzer.spec` to produce a one-file exe (~8.5 MB) with the native
-walker and the HTML template bundled in. PyInstaller caches its analysis in
-`build\`, so re-runs are quick — pure-Python source edits need no recompile,
-only `walker.cpp` changes do. Pass `-Clean` to force a full rebuild.
+walker and the HTML template bundled in. The exe is a proper Windows artifact:
+it carries the application **icon** and a **version resource** (right-click →
+Properties → Details shows ProductName, version, company, and copyright), both
+derived from `storageanalyzer.__version__` so they never drift. PyInstaller
+caches its analysis in `build\`, so re-runs are quick — pure-Python source edits
+need no recompile, only `walker.cpp` changes do. Pass `-Clean` to force a full
+rebuild.
 
 The exe is fully portable: copy `dist\storageanalyzer.exe` anywhere and run it.
 It takes the same arguments as the `storageanalyzer` command below.
+
+### Build a Windows installer
+
+For a friendlier distribution — a per-user installer that adds `storageanalyzer`
+to your PATH and registers an uninstaller — build the [Inno Setup](https://jrsoftware.org/isinfo.php)
+package:
+
+```powershell
+# one-time: install Inno Setup
+winget install JRSoftware.InnoSetup
+
+# build -- produces dist\StorageAnalyzer-Setup-<version>.exe
+.\build-installer.ps1
+```
+
+`build-installer.ps1` builds the exe first, then compiles
+`installer\storageanalyzer.iss`. The installer needs no admin rights (installs
+under `%LOCALAPPDATA%\Programs`), offers an opt-in "add to PATH" task, and shows
+up in *Apps & features*. If Inno Setup isn't installed the script still builds
+the exe and exits with a note — the one-file exe is shippable on its own.
+
+### Automated releases
+
+`.github/workflows/release.yml` builds the exe and the installer on Windows for
+every push and PR, and **publishes a GitHub Release with both attached whenever
+a version tag is pushed**:
+
+```powershell
+git tag v1.0.1
+git push --tags
+```
+
+The icon and version metadata are regenerated from `__version__` on every build,
+so the only thing to bump for a release is `__version__` in
+`src/storageanalyzer/__init__.py` (and the matching `version` in
+`pyproject.toml`). The application icon lives at `packaging/storageanalyzer.ico`;
+regenerate or tweak it with `python packaging/make_icon.py` (requires Pillow).
 
 ## Usage
 
