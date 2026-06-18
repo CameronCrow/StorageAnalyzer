@@ -18,6 +18,10 @@ either way**, the native engine is purely a speedup.
 - **Interactive HTML report.** One `.html` file, no CDN, no network — opens
   offline with a double-click. Treemap drill-down, breadcrumb navigation,
   column sorting, path filtering.
+- **Native desktop GUI.** A point-and-click Tkinter window (`storageanalyzer
+  --gui`) for picking a folder, setting options, and browsing the largest
+  files/folders in sortable tables — no command line, no browser required. Like
+  everything else here it uses only the standard library.
 - **Zero runtime dependencies.** Just the Python standard library. The C++
   build needs `pybind11` + a compiler, but those are build-time only.
 - **Optional native speedup.** No compiler? `pip install` still succeeds and
@@ -46,6 +50,27 @@ environment's `pybind11`):
 ```powershell
 pip install -e . --no-build-isolation
 ```
+
+## Native GUI
+
+Prefer clicking to typing? Launch the desktop app:
+
+```powershell
+# either of these opens the native window
+storageanalyzer --gui
+storageanalyzer-gui
+python -m storageanalyzer.gui
+```
+
+The window lets you pick a folder, choose the engine / thread count / top-N
+counts, toggle hidden-and-system inclusion, and run a scan. The walk runs on a
+background thread so the window stays responsive, and results appear as a stats
+summary plus sortable **Largest folders** / **Largest files** tables (click a
+column header to sort). *Open HTML report* / *Save HTML report…* render the full
+interactive treemap report from the same scan.
+
+The GUI is pure Tkinter (Python standard library) — it adds **no** runtime
+dependency and calls the same `scan()` engine the CLI uses.
 
 ## Build a standalone .exe
 
@@ -111,10 +136,12 @@ storageanalyzer "C:\Users\you" --include-hidden -o report.html
 ```
 src/storageanalyzer/
   cli.py         argparse, validation, orchestration, console summary
+  gui.py         native Tkinter desktop app (runs scan() on a worker thread)
   scan.py        engine selection (native vs fallback), normalized scan()
   fallback.py    pure-Python ThreadPoolExecutor-style parallel walker
   aggregate.py   recursive size rollup, top-N tables, treemap tree + pruning
   report.py      fills template.html with the embedded JSON payload
+  _format.py     shared human-readable byte formatting (CLI + GUI)
   template.html  the single-file report (inline CSS/JS, vanilla treemap)
 native/walker.cpp   optional pybind11 C++ walker (FindFirstFileExW + thread pool)
 ```

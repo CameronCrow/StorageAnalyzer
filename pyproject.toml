@@ -30,6 +30,10 @@ build = ["pyinstaller>=6.0", "pybind11>=2.10"]
 [project.scripts]
 storageanalyzer = "storageanalyzer.cli:main"
 
+# GUI launcher -- a gui-script so Windows starts it without a console window.
+[project.gui-scripts]
+storageanalyzer-gui = "storageanalyzer.gui:main"
+
 [project.urls]
 Homepage = "https://github.com/CameronCrow/StorageAnalyzer"
 
