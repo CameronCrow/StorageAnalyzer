@@ -18,10 +18,13 @@ either way**, the native engine is purely a speedup.
 - **Interactive HTML report.** One `.html` file, no CDN, no network — opens
   offline with a double-click. Treemap drill-down, breadcrumb navigation,
   column sorting, path filtering.
-- **Native desktop GUI.** A point-and-click Tkinter window (`storageanalyzer
-  --gui`) for picking a folder, setting options, and browsing the largest
-  files/folders in sortable tables — no command line, no browser required. Like
-  everything else here it uses only the standard library.
+- **Native desktop GUI.** Launch the app with no arguments (double-click the
+  exe, or run `storageanalyzer`) and a point-and-click Tkinter window opens: pick
+  a folder, set options, scan, and browse the largest files/folders in sortable
+  tables. When the scan finishes the full interactive report opens right in a
+  chromeless desktop window (Microsoft Edge / Chrome `--app` mode) — no browser
+  tab, no command line. Like everything else here it uses only the standard
+  library.
 - **Zero runtime dependencies.** Just the Python standard library. The C++
   build needs `pybind11` + a compiler, but those are build-time only.
 - **Optional native speedup.** No compiler? `pip install` still succeeds and
@@ -53,12 +56,13 @@ pip install -e . --no-build-isolation
 
 ## Native GUI
 
-Prefer clicking to typing? Launch the desktop app:
+Prefer clicking to typing? Just launch the app with **no arguments** — the
+desktop window is the default:
 
 ```powershell
-# either of these opens the native window
-storageanalyzer --gui
-storageanalyzer-gui
+# any of these opens the native window
+storageanalyzer            # no arguments -> GUI
+storageanalyzer --gui      # explicit
 python -m storageanalyzer.gui
 ```
 
@@ -66,8 +70,13 @@ The window lets you pick a folder, choose the engine / thread count / top-N
 counts, toggle hidden-and-system inclusion, and run a scan. The walk runs on a
 background thread so the window stays responsive, and results appear as a stats
 summary plus sortable **Largest folders** / **Largest files** tables (click a
-column header to sort). *Open HTML report* / *Save HTML report…* render the full
-interactive treemap report from the same scan.
+column header to sort).
+
+When a scan finishes, the full interactive treemap report opens automatically in
+a **chromeless desktop window** — Microsoft Edge (or Chrome) in `--app` mode, a
+clean window with no tabs or address bar — falling back to your default browser
+if neither is installed. *Open HTML report* re-opens it; *Save HTML report…*
+writes it to a file you choose.
 
 The GUI is pure Tkinter (Python standard library) — it adds **no** runtime
 dependency and calls the same `scan()` engine the CLI uses.
@@ -96,7 +105,8 @@ need no recompile, only `walker.cpp` changes do. Pass `-Clean` to force a full
 rebuild.
 
 The exe is fully portable: copy `dist\storageanalyzer.exe` anywhere and run it.
-It takes the same arguments as the `storageanalyzer` command below.
+**Double-clicking it opens the desktop GUI**; from a terminal it takes the same
+arguments as the `storageanalyzer` command below.
 
 ### Build a Windows installer
 
@@ -137,12 +147,18 @@ regenerate or tweak it with `python packaging/make_icon.py` (requires Pillow).
 
 ## Usage
 
+Run with **no arguments to open the desktop GUI**; pass a path (or any flag) to
+use the command-line scanner.
+
 ```powershell
-# scan C:\ (the default) and open the report in your browser
+# no arguments -> open the desktop GUI
 storageanalyzer
 
-# scan a specific folder
+# scan a specific folder from the command line (writes + opens the HTML report)
 storageanalyzer "C:\Users\you\Downloads"
+
+# scan C:\ explicitly
+storageanalyzer "C:\"
 
 # also runnable as a module
 python -m storageanalyzer "D:\"
@@ -152,7 +168,8 @@ python -m storageanalyzer "D:\"
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `root` | Directory to scan | `C:\` |
+| *(no arguments)* | Open the desktop GUI instead of scanning | — |
+| `root` | Directory to scan (omit entirely to open the GUI) | `C:\` |
 | `-o, --output PATH` | HTML report path | `storageanalyzer-report-<timestamp>.html` |
 | `--engine {auto,native,python}` | Walker engine. `auto` uses native if built, else python. `native` errors if not built. `python` forces the fallback. | `auto` |
 | `--threads N` | Worker thread count | CPU count, clamped to `[2, 16]` |
