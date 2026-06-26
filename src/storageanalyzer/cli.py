@@ -132,6 +132,16 @@ def _print_summary(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # No arguments at all -> open the desktop GUI (double-click / Start menu).
+    # Pass a path or any flag to use the command-line scanner instead.
+    if not argv:
+        from .gui import main as gui_main
+
+        return gui_main()
+
     args = _build_parser().parse_args(argv)
 
     if args.gui:
