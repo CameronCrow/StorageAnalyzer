@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
+import subprocess
 import tempfile
 import threading
 import webbrowser
@@ -70,6 +72,88 @@ def dir_row(entry: dict[str, Any]) -> tuple[str, str, str]:
 def file_row(entry: dict[str, Any]) -> tuple[str, str]:
     """Display columns for one 'largest file' row: (size, path)."""
     return (format_size(entry["size"]), entry["path"])
+
+
+# --------------------------------------------------------------------------- #
+# Showing the report "in the app".                                            #
+#                                                                              #
+# The report is a self-contained JavaScript web app, which Tk cannot render.   #
+# Rather than a normal browser tab we launch a Chromium browser (Edge first,   #
+# then Chrome) in `--app` mode: a clean, borderless window with no tabs or     #
+# address bar -- as close to "inside the app" as we get without taking a       #
+# dependency. If no such browser is found we fall back to the default browser. #
+# All stdlib (subprocess / shutil), so the zero-dependency promise holds.      #
+# --------------------------------------------------------------------------- #
+
+
+def find_app_browser() -> Optional[str]:
+    """Path to a Chromium browser that supports ``--app`` mode (Edge, then
+    Chrome), or ``None`` if neither is found."""
+    if os.name != "nt":
+        for name in ("microsoft-edge", "google-chrome", "chromium", "chrome"):
+            found = shutil.which(name)
+            if found:
+                return found
+        return None
+    # Windows: probe the standard install locations, Edge before Chrome.
+    relatives = [
+        ("Microsoft", "Edge", "Application", "msedge.exe"),
+        ("Google", "Chrome", "Application", "chrome.exe"),
+    ]
+    for env in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        base = os.environ.get(env)
+        if not base:
+            continue
+        for parts in relatives:
+            candidate = os.path.join(base, *parts)
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+def app_window_argv(
+    browser_path: str, uri: str, size: tuple[int, int] = (1200, 800)
+) -> list[str]:
+    """Build the argv that opens *uri* as a chromeless ``--app`` window."""
+    width, height = size
+    return [browser_path, f"--app={uri}", f"--window-size={width},{height}"]
+
+
+def open_report_window(html_path: os.PathLike[str] | str) -> None:
+    """Open an HTML report in a chromeless app window; fall back to the default
+    browser if no Chromium browser is available."""
+    uri = Path(html_path).resolve().as_uri()
+    browser = find_app_browser()
+    if browser:
+        try:
+            subprocess.Popen(app_window_argv(browser, uri))
+            return
+        except OSError:
+            pass  # fall through to the default browser
+    webbrowser.open(uri)
+
+
+def _maybe_hide_console() -> None:
+    """When the exe was double-clicked we exclusively own a console window;
+    hide it so the GUI behaves like a real desktop app. No-op when launched from
+    a shared terminal (so the user's shell is never hidden) or off Windows.
+    Pure stdlib via ctypes."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        hwnd = kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+        # GetConsoleProcessList reports how many processes share this console;
+        # 1 means it is ours alone (a double-click), so it is safe to hide.
+        buf = (ctypes.c_uint * 1)()
+        if kernel32.GetConsoleProcessList(buf, 1) == 1:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -314,6 +398,8 @@ class StorageAnalyzerApp:
             )
             self.btn_open.config(state="normal")
             self.btn_save.config(state="normal")
+            # Pop the interactive report open as soon as the scan finishes.
+            self._open_report()
         else:
             from tkinter import messagebox
 
@@ -387,7 +473,7 @@ class StorageAnalyzerApp:
         try:
             tmp = Path(tempfile.gettempdir()) / default_report_path().name
             write_report(self._report_data, tmp)
-            webbrowser.open(tmp.resolve().as_uri())
+            open_report_window(tmp)
         except Exception as exc:
             messagebox.showerror("StorageAnalyzer", f"Could not open report:\n{exc}")
 
@@ -412,6 +498,7 @@ class StorageAnalyzerApp:
 
 def main(argv: Optional[list[str]] = None) -> int:
     """Launch the GUI. Returns a process exit code."""
+    _maybe_hide_console()
     try:
         import tkinter as tk
     except ImportError:  # pragma: no cover - tkinter missing from a stripped build

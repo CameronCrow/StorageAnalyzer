@@ -1,4 +1,7 @@
-# PyInstaller build spec -- produces a polished one-file Windows console exe.
+# PyInstaller build spec -- produces a polished one-file Windows exe that opens
+# the desktop GUI when launched with no arguments and runs the CLI when given
+# any. It stays a console subsystem exe so the CLI can print; the GUI hides that
+# console itself when it owns it (see gui._maybe_hide_console).
 #
 # Build:  pyinstaller storageanalyzer.spec --noconfirm
 # Or just run build-exe.ps1, which (re)builds the native extension first.
@@ -88,7 +91,12 @@ _icon = _icon if Path(_icon).is_file() else None
 # pure-Python walker.
 _pyd = glob.glob("src/storageanalyzer/_native_walker*.pyd")
 binaries = [(p, "storageanalyzer") for p in _pyd]
-hiddenimports = ["storageanalyzer._native_walker"] if _pyd else []
+# tkinter is imported lazily inside gui.py, and the GUI is now the default
+# action when the exe is launched with no arguments -- list it explicitly so it
+# is always bundled, native walker present or not.
+hiddenimports = ["tkinter"]
+if _pyd:
+    hiddenimports.append("storageanalyzer._native_walker")
 
 a = Analysis(
     ["scripts/sa_entry.py"],

@@ -67,6 +67,40 @@ def test_dir_and_file_rows_format_sizes():
     assert gui.file_row(data["largest_files"][0]) == ("150 B", r"C:\demo\a\big.bin")
 
 
+def test_app_window_argv_builds_chromeless_command():
+    argv = gui.app_window_argv(
+        r"C:\Edge\msedge.exe", "file:///C:/r.html", size=(1000, 700)
+    )
+    assert argv == [
+        r"C:\Edge\msedge.exe",
+        "--app=file:///C:/r.html",
+        "--window-size=1000,700",
+    ]
+
+
+def test_open_report_window_uses_app_window_when_browser_found(monkeypatch, tmp_path):
+    html = tmp_path / "report.html"
+    html.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setattr(gui, "find_app_browser", lambda: r"C:\Edge\msedge.exe")
+    recorded = {}
+    monkeypatch.setattr(
+        gui.subprocess, "Popen", lambda argv, *a, **k: recorded.update(argv=argv)
+    )
+    gui.open_report_window(html)
+    assert recorded["argv"][0] == r"C:\Edge\msedge.exe"
+    assert recorded["argv"][1].startswith("--app=file:")
+
+
+def test_open_report_window_falls_back_to_default_browser(monkeypatch, tmp_path):
+    html = tmp_path / "report.html"
+    html.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setattr(gui, "find_app_browser", lambda: None)
+    opened = {}
+    monkeypatch.setattr(gui.webbrowser, "open", lambda uri: opened.update(uri=uri))
+    gui.open_report_window(html)
+    assert opened["uri"].startswith("file:")
+
+
 def test_app_constructs_when_display_available():
     """Smoke test: build the window and verify it renders results. Skips headless."""
     tk = pytest.importorskip("tkinter")
