@@ -55,3 +55,10 @@ def test_render_none_is_the_live_app_shell():
     assert "/*DATA*/" not in html
     assert "const DATA = null;" in html
     assert html.lstrip().startswith("<!DOCTYPE html>")
+
+
+def test_template_ships_dark_mode():
+    html = render(None)
+    assert 'id="theme-toggle"' in html          # the toggle control
+    assert 'data-theme="dark"' in html          # the dark palette block
+    assert "sa-theme" in html                   # the remembered choice key

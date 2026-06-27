@@ -10,6 +10,8 @@ extension is not built (e.g. no C++ compiler installed), the tool transparently
 falls back to a pure-Python parallel walker — **the tool is fully functional
 either way**, the native engine is purely a speedup.
 
+📖 **End-user guide:** [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
+
 ## Highlights
 
 - **Parallel walk.** A worker pool enumerates directories concurrently. On a
@@ -79,6 +81,10 @@ responsive; *Save report…* writes the standalone HTML to a file you choose.
 The window is hosted by **pywebview** on the system webview (Edge WebView2 on
 Windows) and drives the same `scan()` engine the CLI uses. The frontend look and
 feel mirrors the PLC Crawler sidebar-and-stage layout.
+
+A **🌙 / ☀️ toggle** in the top-right corner switches between light and dark
+themes; it follows the Windows app theme by default and remembers your choice.
+Dark mode also travels with a saved report.
 
 ## Build a standalone .exe
 

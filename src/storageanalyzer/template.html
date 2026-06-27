@@ -3,7 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>StorageAnalyzer</title>
+<script>
+  // Set the theme before first paint (no flash): saved choice, else the OS.
+  (function () {
+    try {
+      var t = localStorage.getItem("sa-theme");
+      if (t !== "light" && t !== "dark")
+        t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) { /* localStorage/matchMedia unavailable -> stays light */ }
+  })();
+</script>
 <style>
   /* Look & feel mirrors the PLC Crawler frontend: light panel sidebar, blue
      accent, Segoe UI, a dotted-grid stage. The same file is the live in-window
@@ -19,7 +31,31 @@
     --accent: #2563eb;
     --accent-ink: #ffffff;
     --error: #b91c1c;
+    --field-bg: #ffffff;   /* inputs / buttons */
+    --hover: #f1f5f9;      /* row & button hover */
+    --dot: #eceff3;        /* stage grid dots */
+    --note-bg: #fffbeb;    /* hidden/system notice */
+    --note-line: #f59e0b;
+    --note-ink: #92600a;
     --sidebar-w: 290px;
+  }
+  /* Dark theme: applied when the OS prefers dark (and the user hasn't forced
+     light), or whenever the toggle sets data-theme="dark" explicitly. */
+  :root[data-theme="dark"] {
+    --bg: #0f1117;
+    --panel: #161b26;
+    --line: #2b3245;
+    --ink: #e6e9f0;
+    --muted: #9aa3b2;
+    --accent: #60a5fa;
+    --accent-ink: #0b1220;
+    --error: #f87171;
+    --field-bg: #1e2433;
+    --hover: #1f2738;
+    --dot: #1b2233;
+    --note-bg: #241f10;
+    --note-line: #b45309;
+    --note-ink: #fbbf24;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -58,7 +94,7 @@
     font: inherit; font-size: 13px;
     padding: 6px 8px;
     border: 1px solid var(--line); border-radius: 6px;
-    background: #fff; color: var(--ink);
+    background: var(--field-bg); color: var(--ink);
   }
   input[type="number"] { width: 84px; }
   .folder-row { display: flex; gap: 6px; }
@@ -71,9 +107,9 @@
   button {
     font: inherit; font-size: 13px; cursor: pointer;
     border: 1px solid var(--line); border-radius: 6px;
-    background: #fff; color: var(--ink); padding: 7px 10px;
+    background: var(--field-bg); color: var(--ink); padding: 7px 10px;
   }
-  button:hover { background: #f1f5f9; }
+  button:hover { background: var(--hover); }
   button.primary {
     font-weight: 600; background: var(--accent); color: var(--accent-ink);
     border: none; border-radius: 7px; padding: 9px 12px;
@@ -91,7 +127,7 @@
   /* --- stage --- */
   #stage {
     position: relative; overflow-y: auto;
-    background: radial-gradient(circle at 1px 1px, #eceff3 1px, transparent 0) 0 0 / 22px 22px;
+    background: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px;
   }
   .stage-inner { padding: 22px 26px 40px; max-width: 1500px; margin: 0 auto; }
 
@@ -105,8 +141,8 @@
     padding: 5px 12px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
   .chip b { color: var(--ink); font-weight: 600; }
   #hidden-note {
-    margin-top: 12px; padding: 8px 12px; border-left: 3px solid #f59e0b;
-    background: #fffbeb; border-radius: 4px; font-size: 12.5px; color: #92600a;
+    margin-top: 12px; padding: 8px 12px; border-left: 3px solid var(--note-line);
+    background: var(--note-bg); border-radius: 4px; font-size: 12.5px; color: var(--note-ink);
   }
   #hidden-note code { font-family: Consolas, monospace; }
 
@@ -120,7 +156,7 @@
   #breadcrumb .current { color: var(--ink); cursor: default; }
   canvas {
     width: 100%; height: 460px; border: 1px solid var(--line); border-radius: 8px;
-    background: #fff; cursor: pointer; display: block;
+    background: var(--panel); cursor: pointer; display: block;
   }
   #tooltip {
     position: fixed; pointer-events: none; background: #1f2937; color: #fff;
@@ -132,7 +168,7 @@
   @media (max-width: 1000px) { .tables { grid-template-columns: 1fr; } }
   .filter {
     width: 100%; padding: 7px 10px; margin-bottom: 8px;
-    background: #fff; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit;
+    background: var(--field-bg); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit;
   }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
@@ -144,13 +180,24 @@
   th .arrow { color: var(--accent); }
   td.size { text-align: right; font-family: Consolas, monospace; white-space: nowrap; }
   td.path { font-family: Consolas, monospace; word-break: break-all; }
-  tbody tr:hover { background: #f1f5f9; }
+  tbody tr:hover { background: var(--hover); }
   tbody tr.clickable { cursor: pointer; }
   .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
   .hidden { display: none; }
+
+  /* theme toggle: a small fixed button, visible in both the app and the report */
+  #theme-toggle {
+    position: fixed; top: 12px; right: 16px; z-index: 30;
+    width: 34px; height: 34px; padding: 0; line-height: 1;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: var(--field-bg); color: var(--ink); font-size: 15px; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+  }
+  #theme-toggle:hover { background: var(--hover); }
 </style>
 </head>
 <body>
+<button id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
 <div id="app">
   <aside id="sidebar">
     <h1>Storage&nbsp;Analyzer <small id="version"></small></h1>
@@ -348,6 +395,8 @@ function renderTreemap() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
   rects = [];
+  // grout lines match the page background so tiles read the same in either theme
+  const grout = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#fff";
   const children = (root && root.children) || [];
   if (!children.length) {
     ctx.fillStyle = "#94a3b8";
@@ -358,7 +407,7 @@ function renderTreemap() {
       rects.push(r);
       ctx.fillStyle = colorFor(i);
       ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = grout; ctx.lineWidth = 1.5;
       ctx.strokeRect(r.x, r.y, r.w, r.h);
       if (r.w > 56 && r.h > 22) {
         ctx.save();
@@ -571,6 +620,20 @@ function wireLiveApp() {
   };
   $("folder").addEventListener("keydown", e => { if (e.key === "Enter") runScan(); });
 }
+
+// --- theme toggle (works in both the live app and a saved report) ---------
+(() => {
+  const btn = $("theme-toggle");
+  const sync = () => { btn.textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙"; };
+  btn.onclick = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("sa-theme", next); } catch (e) { /* ignore */ }
+    sync();
+    if (stack.length) renderTreemap();   // re-read grout/bg for the new theme
+  };
+  sync();
+})();
 
 // --- boot ------------------------------------------------------------------
 if (DATA) {
