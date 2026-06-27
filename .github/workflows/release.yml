@@ -34,18 +34,22 @@ jobs:
       - name: Build standalone exe
         run: pyinstaller storageanalyzer.spec --noconfirm
 
-      - name: Smoke-test the exe
+      - name: Smoke-test the build
         shell: pwsh
         run: |
+          # The exe is a windowed GUI app now (no console, and a GUI-subsystem
+          # exe doesn't block the shell), so verify its version resource here and
+          # exercise the scan/report pipeline through the module CLI instead.
           $exe = "dist\storageanalyzer.exe"
-          & $exe --version
           $vi = (Get-Item $exe).VersionInfo
           if ($vi.ProductName -ne "StorageAnalyzer") { throw "missing version resource" }
           $t = Join-Path $env:RUNNER_TEMP "satest"
           New-Item -ItemType Directory -Force -Path $t | Out-Null
           Set-Content -Path (Join-Path $t "f.txt") -Value ("x" * 4096)
-          & $exe $t --no-open -o (Join-Path $env:RUNNER_TEMP "report.html")
-          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP "report.html"))) { throw "no report produced" }
+          $rpt = Join-Path $env:RUNNER_TEMP "report.html"
+          python -m storageanalyzer $t --no-open -o $rpt
+          if ($LASTEXITCODE -ne 0) { throw "module CLI scan failed" }
+          if (-not (Test-Path $rpt)) { throw "no report produced" }
 
       - name: Build installer (Inno Setup)
         shell: pwsh

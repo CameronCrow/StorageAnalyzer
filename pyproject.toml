@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "storageanalyzer"
-version = "1.0.0"
+version = "1.1.0"
 description = "Fast parallel Windows storage analyzer with an interactive HTML report"
 readme = "README.md"
 requires-python = ">=3.9"
