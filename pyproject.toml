@@ -18,14 +18,17 @@ classifiers = [
     "Programming Language :: C++",
     "Topic :: System :: Filesystems",
 ]
-# Zero runtime dependencies -- by design. The standard library is enough,
-# and the optional C++ extension is the only thing that needs a toolchain.
+# The CLI scanner has zero runtime dependencies -- by design. The desktop GUI
+# adds one (pywebview, the native webview host); install it via the `gui` extra.
 dependencies = []
 
 [project.optional-dependencies]
+# Desktop GUI: pywebview hosts the in-window HTML report (Edge WebView2).
+gui = ["pywebview>=5.0"]
 # Tooling for building the standalone .exe (see build-exe.ps1). pybind11 is
 # listed here too so `pip install -e . --no-build-isolation` can find it.
-build = ["pyinstaller>=6.0", "pybind11>=2.10"]
+# pywebview is bundled into the exe, so the build needs it present.
+build = ["pyinstaller>=6.0", "pybind11>=2.10", "pywebview>=5.0"]
 
 [project.scripts]
 storageanalyzer = "storageanalyzer.cli:main"

@@ -18,15 +18,15 @@ either way**, the native engine is purely a speedup.
 - **Interactive HTML report.** One `.html` file, no CDN, no network — opens
   offline with a double-click. Treemap drill-down, breadcrumb navigation,
   column sorting, path filtering.
-- **Native desktop GUI.** Launch the app with no arguments (double-click the
-  exe, or run `storageanalyzer`) and a point-and-click Tkinter window opens: pick
-  a folder, set options, scan, and browse the largest files/folders in sortable
-  tables. When the scan finishes the full interactive report opens right in a
-  chromeless desktop window (Microsoft Edge / Chrome `--app` mode) — no browser
-  tab, no command line. Like everything else here it uses only the standard
-  library.
-- **Zero runtime dependencies.** Just the Python standard library. The C++
-  build needs `pybind11` + a compiler, but those are build-time only.
+- **Desktop GUI.** Launch the app with no arguments (double-click the exe, or
+  run `storageanalyzer`) and a single native window opens — a left sidebar to
+  pick a folder and set options, scan, and the **interactive treemap report
+  renders right in the same window**. No terminal, no separate browser tab. The
+  window is hosted by [pywebview](https://pywebview.flowrl.com/) on the system
+  webview (Edge WebView2 on Windows).
+- **Zero-dependency CLI.** The command-line scanner is pure standard library.
+  Only the desktop GUI adds a dependency (pywebview); the C++ build needs
+  `pybind11` + a compiler, but those are build-time only.
 - **Optional native speedup.** No compiler? `pip install` still succeeds and
   the tool runs. Install the compiler later for a drop-in ~8x speedup.
 
@@ -54,7 +54,7 @@ environment's `pybind11`):
 pip install -e . --no-build-isolation
 ```
 
-## Native GUI
+## Desktop GUI
 
 Prefer clicking to typing? Just launch the app with **no arguments** — the
 desktop window is the default:
@@ -64,22 +64,21 @@ desktop window is the default:
 storageanalyzer            # no arguments -> GUI
 storageanalyzer --gui      # explicit
 python -m storageanalyzer.gui
+
+# from source, the GUI needs pywebview:
+pip install -e ".[gui]"
 ```
 
-The window lets you pick a folder, choose the engine / thread count / top-N
-counts, toggle hidden-and-system inclusion, and run a scan. The walk runs on a
-background thread so the window stays responsive, and results appear as a stats
-summary plus sortable **Largest folders** / **Largest files** tables (click a
-column header to sort).
+It's **one window**: a left sidebar to pick a folder, choose the engine / thread
+count / top-N counts, and toggle hidden-and-system inclusion, and a main stage
+that renders the **interactive treemap report in place** the moment the scan
+finishes — treemap drill-down, breadcrumb, sortable tables, path filters, all in
+the same window. The scan runs in-process on a worker thread so the window stays
+responsive; *Save report…* writes the standalone HTML to a file you choose.
 
-When a scan finishes, the full interactive treemap report opens automatically in
-a **chromeless desktop window** — Microsoft Edge (or Chrome) in `--app` mode, a
-clean window with no tabs or address bar — falling back to your default browser
-if neither is installed. *Open HTML report* re-opens it; *Save HTML report…*
-writes it to a file you choose.
-
-The GUI is pure Tkinter (Python standard library) — it adds **no** runtime
-dependency and calls the same `scan()` engine the CLI uses.
+The window is hosted by **pywebview** on the system webview (Edge WebView2 on
+Windows) and drives the same `scan()` engine the CLI uses. The frontend look and
+feel mirrors the PLC Crawler sidebar-and-stage layout.
 
 ## Build a standalone .exe
 
@@ -95,8 +94,10 @@ pip install -e ".[build]"
 ```
 
 `build-exe.ps1` compiles the native C++ walker, then runs PyInstaller against
-`storageanalyzer.spec` to produce a one-file exe (~8.5 MB) with the native
-walker and the HTML template bundled in. The exe is a proper Windows artifact:
+`storageanalyzer.spec` to produce a one-file **windowed** exe (~21 MB) with the
+native walker, the HTML frontend, and the pywebview/WebView2 host bundled in.
+Because it is a GUI-subsystem exe, double-clicking it **never flashes a
+terminal**. The exe is a proper Windows artifact:
 it carries the application **icon** and a **version resource** (right-click →
 Properties → Details shows ProductName, version, company, and copyright), both
 derived from `storageanalyzer.__version__` so they never drift. PyInstaller
@@ -105,8 +106,10 @@ need no recompile, only `walker.cpp` changes do. Pass `-Clean` to force a full
 rebuild.
 
 The exe is fully portable: copy `dist\storageanalyzer.exe` anywhere and run it.
-**Double-clicking it opens the desktop GUI**; from a terminal it takes the same
-arguments as the `storageanalyzer` command below.
+**Double-clicking it opens the desktop GUI** with no terminal. (It's a windowed
+exe, so for scripted CLI scans with console output use
+`python -m storageanalyzer ...`; passing a path/flag to the exe still scans, it
+just has no console to print to.)
 
 ### Build a Windows installer
 
@@ -194,11 +197,12 @@ storageanalyzer "C:\Users\you" --include-hidden -o report.html
 ```
 src/storageanalyzer/
   cli.py         argparse, validation, orchestration, console summary
-  gui.py         native Tkinter desktop app (runs scan() on a worker thread)
+  gui.py         pywebview shell + Api (scan/pick_folder/save_report) for the JS
   scan.py        engine selection (native vs fallback), normalized scan()
   fallback.py    pure-Python ThreadPoolExecutor-style parallel walker
   aggregate.py   recursive size rollup, top-N tables, treemap tree + pruning
-  report.py      fills template.html with the embedded JSON payload
+  report.py      fills template.html with the embedded JSON payload (or null)
+  template.html  the frontend: sidebar controls + in-window treemap report
   _format.py     shared human-readable byte formatting (CLI + GUI)
   template.html  the single-file report (inline CSS/JS, vanilla treemap)
 native/walker.cpp   optional pybind11 C++ walker (FindFirstFileExW + thread pool)

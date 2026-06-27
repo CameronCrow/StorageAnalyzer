@@ -3,205 +3,287 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StorageAnalyzer Report</title>
+<title>StorageAnalyzer</title>
 <style>
+  /* Look & feel mirrors the PLC Crawler frontend: light panel sidebar, blue
+     accent, Segoe UI, a dotted-grid stage. The same file is the live in-window
+     app (pywebview present -> sidebar controls active) and the standalone HTML
+     report exported by the CLI / "Save report" (no pywebview -> sidebar hidden,
+     stage spans full width). */
   :root {
-    --bg: #0f1117;
-    --panel: #1a1f2e;
-    --border: #2b3245;
-    --text: #e6e9f0;
-    --muted: #8b93a7;
-    --accent: #4ea1d3;
-    --accent-2: #d4af37;
+    --bg: #ffffff;
+    --panel: #f8fafc;
+    --line: #e5e7eb;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --error: #b91c1c;
+    --sidebar-w: 290px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
   body {
-    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
     background: var(--bg);
-    color: var(--text);
-    font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+    font-size: 14px;
   }
-  header {
-    padding: 18px 24px;
-    border-bottom: 1px solid var(--border);
+
+  #app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; }
+  /* Standalone report (no live controls): drop the sidebar, stage spans full. */
+  body.report #app { grid-template-columns: 1fr; }
+  body.report #sidebar { display: none; }
+
+  /* --- sidebar --- */
+  #sidebar {
     background: var(--panel);
-  }
-  header h1 { margin: 0 0 4px; font-size: 18px; }
-  header .root { color: var(--accent); font-family: Consolas, monospace; }
-  .meta {
+    border-right: 1px solid var(--line);
+    padding: 16px 16px 20px;
+    overflow-y: auto;
     display: flex;
-    flex-wrap: wrap;
-    gap: 18px;
-    margin-top: 10px;
-    color: var(--muted);
-    font-size: 13px;
+    flex-direction: column;
+    gap: 14px;
   }
-  .meta b { color: var(--text); font-weight: 600; }
+  #sidebar h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
+  #sidebar h1 small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .muted { color: var(--muted); font-size: 12px; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+  .field.inline { flex-direction: row; align-items: center; gap: 8px; }
+  .field > span { font-weight: 600; }
+  .field small { font-weight: 400; }
+
+  select, input[type="text"], input[type="number"] {
+    font: inherit; font-size: 13px;
+    padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--ink);
+  }
+  input[type="number"] { width: 84px; }
+  .folder-row { display: flex; gap: 6px; }
+  .folder-row input { flex: 1; min-width: 0; }
+
+  fieldset.field { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  fieldset.field legend { font-size: 12px; font-weight: 600; padding: 0 4px; color: var(--muted); }
+  fieldset.field.group { gap: 9px; }
+
+  button {
+    font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--ink); padding: 7px 10px;
+  }
+  button:hover { background: #f1f5f9; }
+  button.primary {
+    font-weight: 600; background: var(--accent); color: var(--accent-ink);
+    border: none; border-radius: 7px; padding: 9px 12px;
+  }
+  button.primary:hover { filter: brightness(1.05); background: var(--accent); }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  #status { min-height: 1.4em; line-height: 1.4; font-size: 12.5px; }
+  #status.error { color: var(--error); }
+  .spin { display: inline-block; width: 12px; height: 12px; margin-right: 6px;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* --- stage --- */
+  #stage {
+    position: relative; overflow-y: auto;
+    background: radial-gradient(circle at 1px 1px, #eceff3 1px, transparent 0) 0 0 / 22px 22px;
+  }
+  .stage-inner { padding: 22px 26px 40px; max-width: 1500px; margin: 0 auto; }
+
+  #empty { color: var(--muted); text-align: center; padding: 18vh 20px; font-size: 14px; }
+  #empty strong { color: var(--ink); display: block; font-size: 16px; margin-bottom: 6px; }
+
+  .summary-head h2 { margin: 0; font-size: 17px; }
+  .summary-head .root { color: var(--accent); font-family: Consolas, monospace; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 12px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .chip b { color: var(--ink); font-weight: 600; }
   #hidden-note {
-    margin-top: 12px;
-    padding: 8px 12px;
-    border-left: 3px solid var(--accent-2);
-    background: #221d10;
-    border-radius: 3px;
-    font-size: 13px;
+    margin-top: 12px; padding: 8px 12px; border-left: 3px solid #f59e0b;
+    background: #fffbeb; border-radius: 4px; font-size: 12.5px; color: #92600a;
   }
-  #hidden-note code {
-    font-family: Consolas, monospace;
-    color: var(--accent-2);
-  }
-  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
-  section { margin-bottom: 32px; }
-  h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent-2); }
-  #breadcrumb {
-    margin-bottom: 8px;
-    font-family: Consolas, monospace;
-    font-size: 13px;
-  }
-  #breadcrumb span {
-    color: var(--accent);
-    cursor: pointer;
-  }
+  #hidden-note code { font-family: Consolas, monospace; }
+
+  section { margin-top: 28px; }
+  h3 { font-size: 13px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  #breadcrumb { margin-bottom: 8px; font-family: Consolas, monospace; font-size: 13px; }
+  #breadcrumb span { color: var(--accent); cursor: pointer; }
   #breadcrumb span:hover { text-decoration: underline; }
   #breadcrumb .sep { color: var(--muted); cursor: default; }
-  #breadcrumb .current { color: var(--text); cursor: default; }
+  #breadcrumb .current { color: var(--ink); cursor: default; }
   canvas {
-    width: 100%;
-    height: 460px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel);
-    cursor: pointer;
-    display: block;
+    width: 100%; height: 460px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; cursor: pointer; display: block;
   }
   #tooltip {
-    position: fixed;
-    pointer-events: none;
-    background: #000;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 6px 9px;
-    font-size: 12px;
-    font-family: Consolas, monospace;
-    display: none;
-    z-index: 10;
-    max-width: 480px;
-    word-break: break-all;
+    position: fixed; pointer-events: none; background: #1f2937; color: #fff;
+    border-radius: 6px; padding: 6px 9px; font-size: 12px; font-family: Consolas, monospace;
+    display: none; z-index: 10; max-width: 480px; word-break: break-all;
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
   }
   .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  @media (max-width: 900px) { .tables { grid-template-columns: 1fr; } }
+  @media (max-width: 1000px) { .tables { grid-template-columns: 1fr; } }
   .filter {
-    width: 100%;
-    padding: 7px 10px;
-    margin-bottom: 8px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    font: inherit;
+    width: 100%; padding: 7px 10px; margin-bottom: 8px;
+    background: #fff; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit;
   }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td {
-    text-align: left;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border);
-  }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
   th {
-    cursor: pointer;
-    user-select: none;
-    color: var(--muted);
-    position: sticky;
-    top: 0;
-    background: var(--panel);
+    cursor: pointer; user-select: none; color: var(--muted);
+    position: sticky; top: 0; background: var(--panel);
   }
-  th:hover { color: var(--text); }
+  th:hover { color: var(--ink); }
   th .arrow { color: var(--accent); }
   td.size { text-align: right; font-family: Consolas, monospace; white-space: nowrap; }
   td.path { font-family: Consolas, monospace; word-break: break-all; }
-  tbody tr:hover { background: #232a3d; }
+  tbody tr:hover { background: #f1f5f9; }
   tbody tr.clickable { cursor: pointer; }
-  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
-  footer {
-    padding: 16px 24px;
-    color: var(--muted);
-    font-size: 12px;
-    border-top: 1px solid var(--border);
-  }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
-<header>
-  <h1>StorageAnalyzer &mdash; <span class="root" id="h-root"></span></h1>
-  <div class="meta">
-    <span>Total: <b id="h-total"></b></span>
-    <span>Files: <b id="h-files"></b></span>
-    <span>Directories: <b id="h-dirs"></b></span>
-    <span>Access denied: <b id="h-denied"></b></span>
-    <span>Elapsed: <b id="h-elapsed"></b></span>
-    <span>Threads: <b id="h-threads"></b></span>
-    <span>Engine: <b id="h-engine"></b></span>
-  </div>
-  <div id="hidden-note" style="display:none">
-    Hidden and system items were skipped &mdash; re-run with
-    <code>--include-hidden</code> to count them. On a system drive this is
-    usually where &ldquo;missing&rdquo; space hides (page file, hibernation
-    file, shadow copies, recycle bin).
-  </div>
-</header>
-<main>
-  <section>
-    <h2>Treemap &mdash; click a folder to drill in</h2>
-    <div id="breadcrumb"></div>
-    <canvas id="treemap"></canvas>
-  </section>
-  <section class="tables">
-    <div>
-      <h2>Largest directories</h2>
-      <input class="filter" id="filter-dirs" placeholder="Filter by path&hellip;">
-      <div class="scroll">
-        <table id="table-dirs">
-          <thead><tr>
-            <th data-key="path">Path</th>
-            <th data-key="size">Recursive size</th>
-            <th data-key="own">Own size</th>
-            <th data-key="files">Files</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+<div id="app">
+  <aside id="sidebar">
+    <h1>Storage&nbsp;Analyzer <small id="version"></small></h1>
+
+    <label class="field">
+      <span>Folder</span>
+      <div class="folder-row">
+        <input id="folder" type="text" placeholder="C:\">
+        <button id="browse" type="button">Browse…</button>
+      </div>
+    </label>
+
+    <label class="field">
+      <span>Engine</span>
+      <select id="engine">
+        <option value="auto">auto — native if built</option>
+        <option value="native">native — C++ walker</option>
+        <option value="python">python — fallback</option>
+      </select>
+    </label>
+
+    <div class="field inline">
+      <span>Threads</span>
+      <input id="threads" type="number" min="1" max="64" placeholder="auto">
+    </div>
+
+    <fieldset class="field group">
+      <legend>Report size</legend>
+      <label class="field inline"><span>Top files</span>
+        <input id="top-files" type="number" min="1" max="10000" value="50"></label>
+      <label class="field inline"><span>Top dirs</span>
+        <input id="top-dirs" type="number" min="1" max="10000" value="50"></label>
+    </fieldset>
+
+    <label class="field inline">
+      <input id="hidden" type="checkbox">
+      <span>Include hidden / system</span>
+    </label>
+
+    <button id="scan" class="primary">Scan</button>
+    <div id="status" class="muted">Pick a folder and press Scan.</div>
+    <button id="save" type="button" disabled>Save report…</button>
+  </aside>
+
+  <main id="stage">
+    <div class="stage-inner">
+      <div id="empty">
+        <strong>No scan yet</strong>
+        Choose a folder on the left and press <b>Scan</b>.
+      </div>
+
+      <div id="report" class="hidden">
+        <div class="summary-head">
+          <h2>StorageAnalyzer &mdash; <span class="root" id="h-root"></span></h2>
+          <div class="chips">
+            <span class="chip">Total <b id="h-total"></b></span>
+            <span class="chip">Files <b id="h-files"></b></span>
+            <span class="chip">Directories <b id="h-dirs"></b></span>
+            <span class="chip" id="chip-denied">Access denied <b id="h-denied"></b></span>
+            <span class="chip">Elapsed <b id="h-elapsed"></b></span>
+            <span class="chip">Threads <b id="h-threads"></b></span>
+            <span class="chip">Engine <b id="h-engine"></b></span>
+          </div>
+          <div id="hidden-note" class="hidden">
+            Hidden and system items were skipped &mdash; enable
+            <code>Include hidden / system</code> to count them. On a system drive
+            this is usually where &ldquo;missing&rdquo; space hides (page file,
+            hibernation file, shadow copies, recycle bin).
+          </div>
+        </div>
+
+        <section>
+          <h3>Treemap &mdash; click a folder to drill in</h3>
+          <div id="breadcrumb"></div>
+          <canvas id="treemap"></canvas>
+        </section>
+
+        <section class="tables">
+          <div>
+            <h3>Largest directories</h3>
+            <input class="filter" id="filter-dirs" placeholder="Filter by path…">
+            <div class="scroll">
+              <table id="table-dirs">
+                <thead><tr>
+                  <th data-key="path">Path</th>
+                  <th data-key="size">Recursive size</th>
+                  <th data-key="own">Own size</th>
+                  <th data-key="files">Files</th>
+                </tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>Largest files</h3>
+            <input class="filter" id="filter-files" placeholder="Filter by path…">
+            <div class="scroll">
+              <table id="table-files">
+                <thead><tr>
+                  <th data-key="path">Path</th>
+                  <th data-key="size">Size</th>
+                </tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="denied-section" class="hidden">
+          <h3>Access-denied directories &mdash; <span id="denied-list-count"></span> not scanned</h3>
+          <p class="muted" style="margin:0 0 8px">
+            These folders could not be enumerated, so their contents are excluded
+            from the totals above. Re-run from an elevated prompt to include them.
+          </p>
+          <input class="filter" id="filter-denied" placeholder="Filter by path…">
+          <div class="scroll">
+            <table id="table-denied">
+              <thead><tr><th data-key="path">Path</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
-    <div>
-      <h2>Largest files</h2>
-      <input class="filter" id="filter-files" placeholder="Filter by path&hellip;">
-      <div class="scroll">
-        <table id="table-files">
-          <thead><tr>
-            <th data-key="path">Path</th>
-            <th data-key="size">Size</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-  <section id="denied-section" style="display:none">
-    <h2>Access-denied directories &mdash; <span id="denied-list-count"></span> not scanned</h2>
-    <p style="color:var(--muted);margin:0 0 8px">
-      These folders could not be enumerated, so their contents are excluded from
-      the totals above. Re-run from an elevated prompt to include them.
-    </p>
-    <input class="filter" id="filter-denied" placeholder="Filter by path&hellip;">
-    <div class="scroll">
-      <table id="table-denied">
-        <thead><tr><th data-key="path">Path</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-</main>
-<footer>Generated by StorageAnalyzer. Self-contained &mdash; no network access required.</footer>
+  </main>
+</div>
 <div id="tooltip"></div>
+
 <script>
+// DATA is null in the live app (filled per scan via the API); in a saved report
+// it is the baked-in scan dict.
 const DATA = /*DATA*/;
+const LIVE = !!(window.pywebview && window.pywebview.api);
 
 function fmtSize(b) {
   const u = ["B", "KB", "MB", "GB", "TB", "PB"];
@@ -209,65 +291,40 @@ function fmtSize(b) {
   while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
   return (i === 0 ? v : v.toFixed(2)) + " " + u[i];
 }
+const $ = id => document.getElementById(id);
 
-// ---- header ----
-DATA.stats = DATA.stats || {};
-document.getElementById("h-root").textContent = DATA.root || "";
-document.getElementById("h-total").textContent = fmtSize(DATA.stats.total_bytes || 0);
-document.getElementById("h-files").textContent = (DATA.stats.files_scanned || 0).toLocaleString();
-document.getElementById("h-dirs").textContent = (DATA.stats.dirs_scanned || 0).toLocaleString();
-document.getElementById("h-denied").textContent = (DATA.stats.denied_count || 0).toLocaleString();
-document.getElementById("h-elapsed").textContent = (DATA.stats.elapsed_seconds != null)
-  ? DATA.stats.elapsed_seconds.toFixed(2) + " s" : "n/a";
-document.getElementById("h-threads").textContent = DATA.stats.threads || "n/a";
-document.getElementById("h-engine").textContent = DATA.stats.engine || "n/a";
-if (!DATA.stats.include_hidden) {
-  document.getElementById("hidden-note").style.display = "";
-}
-
-// ---- squarified treemap ----
-const canvas = document.getElementById("treemap");
-const ctx = canvas.getContext("2d");
-const tooltip = document.getElementById("tooltip");
-let stack = [DATA.tree];      // navigation stack; last entry is current root
-let rects = [];               // hit-test rects for the current render
+// --- treemap state (reset on every render) --------------------------------
+let stack = [];     // navigation stack; last entry is current root
+let rects = [];     // hit-test rects for the current render
 
 function squarify(children, x, y, w, h) {
-  // Classic squarified treemap. Returns [{node, x, y, w, h}, ...].
   const out = [];
   const items = children.filter(c => c.size > 0).slice();
   if (!items.length) return out;
   const total = items.reduce((s, c) => s + c.size, 0);
   let scale = (w * h) / total;
   let area = items.map(c => c.size * scale);
-
   let i = 0;
   while (i < items.length) {
     let row = [i], rowArea = area[i], j = i + 1;
     const vertical = w < h;
     const side = vertical ? w : h;
     function worst(rArea, rowLen) {
-      const len = rArea / side;
       let mx = 0, mn = Infinity;
       for (let k = 0; k < rowLen; k++) { mx = Math.max(mx, area[row[k]]); mn = Math.min(mn, area[row[k]]); }
       return Math.max((side * side * mx) / (rArea * rArea), (rArea * rArea) / (side * side * mn));
     }
     while (j < items.length) {
-      const cur = worst(rowArea, row.length);
-      const next = worst(rowArea + area[j], row.length + 1);
-      if (next > cur) break;
+      if (worst(rowArea + area[j], row.length + 1) > worst(rowArea, row.length)) break;
       row.push(j); rowArea += area[j]; j++;
     }
     const len = rowArea / side;
     let off = 0;
     for (const idx of row) {
       const frac = area[idx] / rowArea;
-      if (vertical) {
-        out.push({ node: items[idx], x: x + off, y: y, w: side * frac, h: len });
-      } else {
-        out.push({ node: items[idx], x: x, y: y + off, w: len, h: side * frac });
-      }
-      off += (vertical ? side * frac : side * frac);
+      if (vertical) out.push({ node: items[idx], x: x + off, y: y, w: side * frac, h: len });
+      else          out.push({ node: items[idx], x: x, y: y + off, w: len, h: side * frac });
+      off += side * frac;
     }
     if (vertical) { y += len; h -= len; } else { x += len; w -= len; }
     i = j;
@@ -275,45 +332,41 @@ function squarify(children, x, y, w, h) {
   return out;
 }
 
-function colorFor(idx) {
-  const hue = (idx * 47) % 360;
-  return `hsl(${hue}, 45%, 42%)`;
+function colorFor(idx) { return `hsl(${(idx * 47) % 360}, 55%, 58%)`; }
+function baseName(p) {
+  if (!p) return p;
+  const parts = p.replace(/[\\/]+$/, "").split(/[\\/]/);
+  return parts[parts.length - 1] || p;
 }
 
-function render() {
+function renderTreemap() {
+  const canvas = $("treemap"), ctx = canvas.getContext("2d");
   const root = stack[stack.length - 1];
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
-  canvas.width = cssW * dpr;
-  canvas.height = cssH * dpr;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
-
   rects = [];
-  const children = root.children || [];
+  const children = (root && root.children) || [];
   if (!children.length) {
-    ctx.fillStyle = "#8b93a7";
+    ctx.fillStyle = "#94a3b8";
     ctx.font = "13px Consolas, monospace";
     ctx.fillText("(no sub-folders to display)", 16, 28);
   } else {
-    const laid = squarify(children, 2, 2, cssW - 4, cssH - 4);
-    laid.forEach((r, i) => {
+    squarify(children, 2, 2, cssW - 4, cssH - 4).forEach((r, i) => {
       rects.push(r);
       ctx.fillStyle = colorFor(i);
       ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = "#0f1117";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5;
       ctx.strokeRect(r.x, r.y, r.w, r.h);
       if (r.w > 56 && r.h > 22) {
-        ctx.fillStyle = "#fff";
-        ctx.font = "12px -apple-system, Segoe UI, sans-serif";
-        const label = baseName(r.node.name);
         ctx.save();
-        ctx.beginPath();
-        ctx.rect(r.x + 3, r.y + 3, r.w - 6, r.h - 6);
-        ctx.clip();
-        ctx.fillText(label, r.x + 5, r.y + 16);
-        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        ctx.beginPath(); ctx.rect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); ctx.clip();
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px 'Segoe UI', sans-serif";
+        ctx.fillText(baseName(r.node.name), r.x + 5, r.y + 16);
+        ctx.fillStyle = "rgba(255,255,255,0.82)";
         ctx.fillText(fmtSize(r.node.size), r.x + 5, r.y + 31);
         ctx.restore();
       }
@@ -322,96 +375,42 @@ function render() {
   renderBreadcrumb();
 }
 
-function baseName(p) {
-  if (!p) return p;
-  const parts = p.replace(/[\\/]+$/, "").split(/[\\/]/);
-  return parts[parts.length - 1] || p;
-}
-
 function renderBreadcrumb() {
-  const bc = document.getElementById("breadcrumb");
-  bc.innerHTML = "";
+  const bc = $("breadcrumb"); bc.innerHTML = "";
   stack.forEach((node, i) => {
-    if (i > 0) {
-      const sep = document.createElement("span");
-      sep.className = "sep";
-      sep.textContent = " › ";
-      bc.appendChild(sep);
-    }
+    if (i > 0) { const s = document.createElement("span"); s.className = "sep"; s.textContent = " › "; bc.appendChild(s); }
     const el = document.createElement("span");
-    const isLast = i === stack.length - 1;
     el.textContent = i === 0 ? (node.name || "root") : baseName(node.name);
-    if (isLast) {
-      el.className = "current";
-    } else {
-      el.onclick = () => { stack = stack.slice(0, i + 1); render(); };
-    }
+    if (i === stack.length - 1) el.className = "current";
+    else el.onclick = () => { stack = stack.slice(0, i + 1); renderTreemap(); };
     bc.appendChild(el);
   });
 }
 
-canvas.addEventListener("click", e => {
-  const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  for (const rect of rects) {
-    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
-      if (rect.node.children && rect.node.children.length && !rect.node.other) {
-        stack.push(rect.node);
-        render();
-      }
-      return;
-    }
-  }
-});
-
-canvas.addEventListener("mousemove", e => {
-  const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  for (const rect of rects) {
-    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
-      tooltip.style.display = "block";
-      tooltip.style.left = (e.clientX + 14) + "px";
-      tooltip.style.top = (e.clientY + 14) + "px";
-      tooltip.textContent = rect.node.name + "  —  " + fmtSize(rect.node.size);
-      return;
-    }
-  }
-  tooltip.style.display = "none";
-});
-canvas.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
-window.addEventListener("resize", render);
-
-function focusPath(path) {
-  // Walk the tree from the root following name prefixes to focus a directory.
-  const chain = [DATA.tree];
-  let cur = DATA.tree;
+function focusPath(data, path) {
+  const chain = [data.tree];
+  let cur = data.tree;
   while (cur && cur.name !== path) {
     const next = (cur.children || []).find(
-      c => !c.other && (path === c.name || path.startsWith(c.name + "\\") || path.startsWith(c.name + "/"))
-    );
+      c => !c.other && (path === c.name || path.startsWith(c.name + "\\") || path.startsWith(c.name + "/")));
     if (!next) break;
-    chain.push(next);
-    cur = next;
+    chain.push(next); cur = next;
   }
-  if (cur && cur.name === path && (cur.children || []).length) {
-    stack = chain;
-  } else if (chain.length > 1) {
-    stack = chain;
-  }
-  render();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (chain.length > 1) stack = chain;
+  renderTreemap();
+  $("stage").scrollTo({ top: 0, behavior: "smooth" });
 }
 
-// ---- sortable / filterable tables ----
+// --- sortable / filterable tables -----------------------------------------
 function makeTable(tableId, filterId, rows, columns, onRowClick) {
   const tbody = document.querySelector(`#${tableId} tbody`);
-  const filterEl = document.getElementById(filterId);
+  const filterEl = $(filterId);
   let sortKey = "size", sortDir = -1;
+  if (tableId === "table-denied") { sortKey = "path"; sortDir = 1; }
 
   function draw() {
     const q = filterEl.value.trim().toLowerCase();
-    let view = rows;
-    if (q) view = rows.filter(r => String(r.path).toLowerCase().includes(q));
+    let view = q ? rows.filter(r => String(r.path).toLowerCase().includes(q)) : rows;
     view = view.slice().sort((a, b) => {
       const av = a[sortKey], bv = b[sortKey];
       if (typeof av === "number") return (av - bv) * sortDir;
@@ -438,54 +437,154 @@ function makeTable(tableId, filterId, rows, columns, onRowClick) {
         ? ` <span class="arrow">${sortDir < 0 ? "▼" : "▲"}</span>` : "");
     });
   }
-
   document.querySelectorAll(`#${tableId} th`).forEach(th => {
     th.onclick = () => {
       const k = th.dataset.key;
-      if (k === sortKey) sortDir *= -1;
-      else { sortKey = k; sortDir = (k === "path") ? 1 : -1; }
+      if (k === sortKey) sortDir *= -1; else { sortKey = k; sortDir = (k === "path") ? 1 : -1; }
       draw();
     };
   });
-  filterEl.addEventListener("input", draw);
+  filterEl.oninput = draw;
   draw();
 }
 
-makeTable("table-dirs", "filter-dirs", DATA.largest_dirs || [],
-  [
-    { key: "path", type: "path" },
-    { key: "size", type: "size" },
-    { key: "own", type: "size" },
-    { key: "files", type: "num" },
-  ],
-  row => focusPath(row.path));
+// --- top-level render ------------------------------------------------------
+function renderReport(data) {
+  if (!data) return;
+  $("empty").classList.add("hidden");
+  $("report").classList.remove("hidden");
 
-makeTable("table-files", "filter-files", DATA.largest_files || [],
-  [
-    { key: "path", type: "path" },
-    { key: "size", type: "size" },
-  ],
-  null);
+  const s = data.stats || {};
+  $("h-root").textContent = data.root || "";
+  $("h-total").textContent = fmtSize(s.total_bytes || 0);
+  $("h-files").textContent = (s.files_scanned || 0).toLocaleString();
+  $("h-dirs").textContent = (s.dirs_scanned || 0).toLocaleString();
+  $("h-denied").textContent = (s.denied_count || 0).toLocaleString();
+  $("h-elapsed").textContent = (s.elapsed_seconds != null) ? s.elapsed_seconds.toFixed(2) + " s" : "n/a";
+  $("h-threads").textContent = s.threads || "n/a";
+  $("h-engine").textContent = s.engine || "n/a";
+  $("hidden-note").classList.toggle("hidden", !!s.include_hidden);
 
-// ---- access-denied directories ----
-const deniedDirs = DATA.denied_dirs || [];
-if (deniedDirs.length) {
-  document.getElementById("denied-section").style.display = "";
-  document.getElementById("denied-list-count").textContent =
-    deniedDirs.length.toLocaleString();
-  makeTable("table-denied", "filter-denied",
-    deniedDirs.map(p => ({ path: p })),
-    [{ key: "path", type: "path" }],
-    null);
-  const hd = document.getElementById("h-denied");
-  hd.style.cursor = "pointer";
-  hd.style.textDecoration = "underline";
-  hd.title = "Jump to the access-denied list";
-  hd.onclick = () => document.getElementById("denied-section")
-    .scrollIntoView({ behavior: "smooth" });
+  stack = [data.tree];
+  renderTreemap();
+
+  makeTable("table-dirs", "filter-dirs", data.largest_dirs || [],
+    [{ key: "path", type: "path" }, { key: "size", type: "size" },
+     { key: "own", type: "size" }, { key: "files", type: "num" }],
+    row => focusPath(data, row.path));
+  makeTable("table-files", "filter-files", data.largest_files || [],
+    [{ key: "path", type: "path" }, { key: "size", type: "size" }], null);
+
+  const denied = data.denied_dirs || [];
+  $("denied-section").classList.toggle("hidden", !denied.length);
+  if (denied.length) {
+    $("denied-list-count").textContent = denied.length.toLocaleString();
+    makeTable("table-denied", "filter-denied", denied.map(p => ({ path: p })),
+      [{ key: "path", type: "path" }], null);
+    const hd = $("h-denied");
+    hd.style.cursor = "pointer"; hd.style.textDecoration = "underline";
+    $("chip-denied").title = "Jump to the access-denied list";
+    $("chip-denied").onclick = () => $("denied-section").scrollIntoView({ behavior: "smooth" });
+  }
 }
 
-render();
+// --- treemap canvas interactions ------------------------------------------
+(() => {
+  const canvas = $("treemap"), tooltip = $("tooltip");
+  canvas.addEventListener("click", e => {
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    for (const rect of rects)
+      if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+        if (rect.node.children && rect.node.children.length && !rect.node.other) { stack.push(rect.node); renderTreemap(); }
+        return;
+      }
+  });
+  canvas.addEventListener("mousemove", e => {
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    for (const rect of rects)
+      if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+        tooltip.style.display = "block";
+        tooltip.style.left = (e.clientX + 14) + "px"; tooltip.style.top = (e.clientY + 14) + "px";
+        tooltip.textContent = rect.node.name + "  —  " + fmtSize(rect.node.size);
+        return;
+      }
+    tooltip.style.display = "none";
+  });
+  canvas.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+  window.addEventListener("resize", () => { if (stack.length) renderTreemap(); });
+})();
+
+// --- live app wiring (only when hosted in the pywebview window) ------------
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.className = kind === "error" ? "error" : "muted";
+  el.innerHTML = (kind === "busy" ? '<span class="spin"></span>' : "") + msg;
+}
+
+let lastData = null;
+
+async function runScan() {
+  const folder = $("folder").value.trim();
+  if (!folder) { setStatus("Enter a folder to scan.", "error"); return; }
+  const threads = parseInt($("threads").value, 10);
+  const params = {
+    root: folder,
+    engine: $("engine").value,
+    threads: Number.isFinite(threads) && threads > 0 ? threads : null,
+    include_hidden: $("hidden").checked,
+    top_files: parseInt($("top-files").value, 10) || 50,
+    top_dirs: parseInt($("top-dirs").value, 10) || 50,
+  };
+  $("scan").disabled = true; $("save").disabled = true;
+  setStatus("Scanning " + folder + " …", "busy");
+  try {
+    const res = await window.pywebview.api.scan(params);
+    if (res.error) { setStatus(res.error, "error"); return; }
+    lastData = res.data;
+    renderReport(lastData);
+    const st = lastData.stats || {};
+    setStatus("Done: " + (st.files_scanned || 0).toLocaleString() + " files, "
+      + fmtSize(st.total_bytes || 0) + " in " + (st.elapsed_seconds || 0).toFixed(2) + " s.");
+    $("save").disabled = false;
+  } catch (e) {
+    setStatus("Scan failed: " + e, "error");
+  } finally {
+    $("scan").disabled = false;
+  }
+}
+
+function wireLiveApp() {
+  document.body.classList.remove("report");
+  window.pywebview.api.meta().then(m => {
+    $("version").textContent = "v" + (m.version || "");
+    if (!$("folder").value) $("folder").value = m.default_root || "";
+  });
+  $("scan").onclick = runScan;
+  $("browse").onclick = async () => {
+    const path = await window.pywebview.api.pick_folder();
+    if (path) $("folder").value = path;
+  };
+  $("save").onclick = async () => {
+    if (!lastData) return;
+    const saved = await window.pywebview.api.save_report();
+    if (saved) setStatus("Saved to " + saved);
+  };
+  $("folder").addEventListener("keydown", e => { if (e.key === "Enter") runScan(); });
+}
+
+// --- boot ------------------------------------------------------------------
+if (DATA) {
+  // Standalone exported report: data baked in, no live controls.
+  document.body.classList.add("report");
+  renderReport(DATA);
+} else if (LIVE) {
+  wireLiveApp();
+} else {
+  // Raw template opened directly with no data and no host: stay on the empty state.
+  document.body.classList.add("report");
+}
+// pywebview may finish injecting its API just after load; wire up on its event too.
+window.addEventListener("pywebviewready", () => { if (!DATA) wireLiveApp(); });
 </script>
 </body>
 </html>

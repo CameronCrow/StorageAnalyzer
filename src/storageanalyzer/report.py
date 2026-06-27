@@ -16,14 +16,21 @@ def _load_template() -> str:
     )
 
 
-def render(report_data: dict[str, Any]) -> str:
-    """Return the full HTML document with ``report_data`` embedded as JSON."""
+def render(report_data: dict[str, Any] | None) -> str:
+    """Return the full HTML document with ``report_data`` embedded as JSON.
+
+    ``report_data=None`` renders the live-app shell (``DATA = null``): the same
+    page the pywebview window loads before the first scan, with the sidebar
+    controls active.
+    """
     template = _load_template()
     if _PLACEHOLDER not in template:
         raise ValueError("template.html is missing the /*DATA*/ placeholder")
     # ensure_ascii keeps the output 7-bit clean; </ is escaped so an embedded
     # path can never terminate the <script> block early.
-    payload = json.dumps(report_data, ensure_ascii=True).replace("</", "<\\/")
+    payload = "null" if report_data is None else (
+        json.dumps(report_data, ensure_ascii=True).replace("</", "<\\/")
+    )
     return template.replace(_PLACEHOLDER, payload)
 
 

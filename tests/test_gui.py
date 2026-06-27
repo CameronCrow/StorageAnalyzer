@@ -1,40 +1,15 @@
-"""Tests for the native GUI.
+"""Tests for the pywebview desktop shell.
 
-The pure helpers (size/row/summary formatting, default report path) are tested
-directly -- they never touch Tk. Constructing the actual window requires a
-display, so that smoke test is skipped when no display is available (e.g. a
-headless CI box) rather than failing.
+The GUI is one pywebview window whose JS calls into :class:`gui.Api`. Those API
+methods are plain Python (no window, no display needed for the scan path), so we
+exercise them directly: a real in-process scan of a temp tree, error handling,
+and the empty live-app page the window loads before the first scan.
 """
 
-import pytest
+import os
 
 from storageanalyzer import gui
-
-
-def _report_data():
-    return {
-        "root": r"C:\demo",
-        "tree": {"name": r"C:\demo", "size": 300, "own": 0, "files": 0},
-        "largest_files": [
-            {"path": r"C:\demo\a\big.bin", "size": 150},
-            {"path": r"C:\demo\b\small.txt", "size": 10},
-        ],
-        "largest_dirs": [
-            {"path": r"C:\demo\a", "size": 200, "own": 200, "files": 2},
-            {"path": r"C:\demo\b", "size": 100, "own": 100, "files": 1},
-        ],
-        "denied_dirs": [],
-        "stats": {
-            "total_bytes": 300,
-            "files_scanned": 3,
-            "dirs_scanned": 3,
-            "denied_count": 0,
-            "engine": "python",
-            "threads": 4,
-            "elapsed_seconds": 0.12,
-            "include_hidden": False,
-        },
-    }
+from storageanalyzer.report import render
 
 
 def test_default_report_path_is_timestamped_html():
@@ -43,79 +18,40 @@ def test_default_report_path_is_timestamped_html():
     assert path.suffix == ".html"
 
 
-def test_summary_rows_cover_key_stats():
-    rows = dict(gui.summary_rows(_report_data()))
-    assert rows["Root"] == r"C:\demo"
-    assert rows["Engine"] == "python"
-    assert rows["Files scanned"] == "3"
-    assert rows["Total size"] == "300 B"
-    assert rows["Elapsed"] == "0.12 s"
-    # hidden/system note shown only when they were skipped
-    assert "Note" in rows
+def test_meta_reports_version_and_root():
+    meta = gui.Api().meta()
+    assert meta["version"]
+    assert os.path.isdir(meta["default_root"])
 
 
-def test_summary_rows_omit_note_when_hidden_included():
-    data = _report_data()
-    data["stats"]["include_hidden"] = True
-    rows = dict(gui.summary_rows(data))
-    assert "Note" not in rows
+def test_scan_rejects_non_directory():
+    res = gui.Api().scan({"root": r"C:\definitely\not\a\real\dir\xyzzy"})
+    assert "error" in res and "Not a directory" in res["error"]
 
 
-def test_dir_and_file_rows_format_sizes():
-    data = _report_data()
-    assert gui.dir_row(data["largest_dirs"][0]) == ("200 B", "2", r"C:\demo\a")
-    assert gui.file_row(data["largest_files"][0]) == ("150 B", r"C:\demo\a\big.bin")
+def test_scan_rejects_bad_threads(tmp_path):
+    res = gui.Api().scan({"root": str(tmp_path), "threads": 0})
+    assert "error" in res
 
 
-def test_app_window_argv_builds_chromeless_command():
-    argv = gui.app_window_argv(
-        r"C:\Edge\msedge.exe", "file:///C:/r.html", size=(1000, 700)
-    )
-    assert argv == [
-        r"C:\Edge\msedge.exe",
-        "--app=file:///C:/r.html",
-        "--window-size=1000,700",
-    ]
+def test_scan_runs_in_process_and_returns_data(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "big.bin").write_bytes(b"x" * 4096)
+    (tmp_path / "small.txt").write_text("hi", encoding="utf-8")
+
+    api = gui.Api()
+    res = api.scan({"root": str(tmp_path), "engine": "python", "threads": 2})
+    assert "data" in res
+    data = res["data"]
+    assert data["root"] == os.path.abspath(str(tmp_path))
+    assert data["stats"]["files_scanned"] >= 2
+    assert data["stats"]["elapsed_seconds"] is not None
+    # the result is retained so a subsequent Save can write it
+    assert api._last is data
 
 
-def test_open_report_window_uses_app_window_when_browser_found(monkeypatch, tmp_path):
-    html = tmp_path / "report.html"
-    html.write_text("<html></html>", encoding="utf-8")
-    monkeypatch.setattr(gui, "find_app_browser", lambda: r"C:\Edge\msedge.exe")
-    recorded = {}
-    monkeypatch.setattr(
-        gui.subprocess, "Popen", lambda argv, *a, **k: recorded.update(argv=argv)
-    )
-    gui.open_report_window(html)
-    assert recorded["argv"][0] == r"C:\Edge\msedge.exe"
-    assert recorded["argv"][1].startswith("--app=file:")
-
-
-def test_open_report_window_falls_back_to_default_browser(monkeypatch, tmp_path):
-    html = tmp_path / "report.html"
-    html.write_text("<html></html>", encoding="utf-8")
-    monkeypatch.setattr(gui, "find_app_browser", lambda: None)
-    opened = {}
-    monkeypatch.setattr(gui.webbrowser, "open", lambda uri: opened.update(uri=uri))
-    gui.open_report_window(html)
-    assert opened["uri"].startswith("file:")
-
-
-def test_app_constructs_when_display_available():
-    """Smoke test: build the window and verify it renders results. Skips headless."""
-    tk = pytest.importorskip("tkinter")
-    try:
-        root = tk.Tk()
-    except tk.TclError:
-        pytest.skip("no display available for Tk")
-    try:
-        root.withdraw()
-        app = gui.StorageAnalyzerApp(root)
-        app._populate(_report_data())
-        assert len(app.tree_dirs.get_children()) == 2
-        assert len(app.tree_files.get_children()) == 2
-        # default sort is by size, descending -> largest folder first
-        first = app.tree_dirs.item(app.tree_dirs.get_children()[0])["values"]
-        assert first[2] == r"C:\demo\a"
-    finally:
-        root.destroy()
+def test_render_none_is_the_live_app_shell():
+    html = render(None)
+    assert "/*DATA*/" not in html
+    assert "const DATA = null;" in html
+    assert html.lstrip().startswith("<!DOCTYPE html>")

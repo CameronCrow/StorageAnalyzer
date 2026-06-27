@@ -1,7 +1,9 @@
 # PyInstaller build spec -- produces a polished one-file Windows exe that opens
-# the desktop GUI when launched with no arguments and runs the CLI when given
-# any. It stays a console subsystem exe so the CLI can print; the GUI hides that
-# console itself when it owns it (see gui._maybe_hide_console).
+# the pywebview desktop GUI when launched with no arguments and runs the CLI
+# when given any. It is a *windowed* (GUI subsystem) exe, so double-clicking it
+# never flashes a terminal; the report renders inside the app window itself.
+# CLI users run `python -m storageanalyzer ...` (the exe has no console to print
+# to). The frontend is self-contained -- it pulls nothing from the network.
 #
 # Build:  pyinstaller storageanalyzer.spec --noconfirm
 # Or just run build-exe.ps1, which (re)builds the native extension first.
@@ -91,20 +93,33 @@ _icon = _icon if Path(_icon).is_file() else None
 # pure-Python walker.
 _pyd = glob.glob("src/storageanalyzer/_native_walker*.pyd")
 binaries = [(p, "storageanalyzer") for p in _pyd]
-# tkinter is imported lazily inside gui.py, and the GUI is now the default
-# action when the exe is launched with no arguments -- list it explicitly so it
-# is always bundled, native walker present or not.
-hiddenimports = ["tkinter"]
+datas = [("src/storageanalyzer/template.html", "storageanalyzer")]
+hiddenimports = []
 if _pyd:
     hiddenimports.append("storageanalyzer._native_walker")
+
+# pywebview hosts the GUI window. It ships its own PyInstaller hooks, but its
+# Windows backend rides on pythonnet/clr (Python.Runtime.dll + the WebView2
+# loader) which static analysis can miss -- collect them all explicitly so the
+# windowed exe carries a working webview engine.
+from PyInstaller.utils.hooks import collect_all  # noqa: E402
+
+for _pkg in ("webview", "clr_loader", "pythonnet"):
+    try:
+        _d, _b, _h = collect_all(_pkg)
+    except Exception:
+        continue
+    datas += _d
+    binaries += _b
+    hiddenimports += _h
 
 a = Analysis(
     ["scripts/sa_entry.py"],
     pathex=["src"],
     binaries=binaries,
-    datas=[("src/storageanalyzer/template.html", "storageanalyzer")],
+    datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["pytest", "_pytest", "pybind11"],
+    excludes=["pytest", "_pytest", "pybind11", "tkinter"],
     noarchive=False,
 )
 
@@ -124,7 +139,7 @@ exe = EXE(
     strip=False,
     upx=False,
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
