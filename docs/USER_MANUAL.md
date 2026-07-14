@@ -1,3 +1,8 @@
+---
+type: reference
+tags: [repo/StorageAnalyzer]
+up: "[[StorageAnalyzer]]"
+---
 # StorageAnalyzer — User Manual
 
 StorageAnalyzer scans a folder (or a whole drive) and shows you **where your
@@ -193,3 +198,7 @@ wasn't built. Switch to **auto** or **python**, or build the native extension.
 
 **My theme choice didn't stick.** The choice is saved per WebView2 profile; if
 storage is cleared it falls back to following the Windows app theme.
+
+## Related
+
+- [[Repos/StorageAnalyzer/StorageAnalyzer|StorageAnalyzer]] — repo hub
